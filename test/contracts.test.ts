@@ -12,6 +12,9 @@ const { poseidon1, poseidon2 } = require("poseidon-lite");
 describe("ZKDAO System Integration", function () {
     let verifierContract: any;
     let daoContract: any;
+    let registryContract: any;
+    let badgeContract: any;
+    let poseidonContract: any;
     let deployer: any;
 
     // Helper for generating Poseidon hashes in JS.
@@ -24,15 +27,43 @@ describe("ZKDAO System Integration", function () {
     before(async function () {
         [deployer] = await ethers.getSigners();
 
-        // Deploy the generated Verifier contract.
+        // 1. Deploy the generated Verifier contract.
         const VerifierFactory = await ethers.getContractFactory("Verifier");
         verifierContract = await VerifierFactory.deploy();
-        await verifierContract.waitForDeployment();
 
-        // Deploy the main DAO logic.
+        // 2. Deploy Real Poseidon from Bytecode
+        const poseidonArtifact = require("../build/PoseidonBytecode.json");
+        const tx = await deployer.sendTransaction({
+            data: poseidonArtifact.bytecode
+        });
+        const receipt = await tx.wait();
+        const poseidonAddress = receipt.contractAddress;
+
+        // We cast it to Poseidon for type safety if needed, 
+        // using the Poseidon contract from contracts/Poseidon.sol
+        poseidonContract = await ethers.getContractAt("Poseidon", poseidonAddress);
+
+        // 3. Deploy Badge
+        const Badge = await ethers.getContractFactory("ZKVoxBadge");
+        badgeContract = await Badge.deploy();
+
+        // 4. Deploy Registry
+        const MembershipRegistry = await ethers.getContractFactory("MembershipRegistry");
+        registryContract = await MembershipRegistry.deploy(await poseidonContract.getAddress(), 0);
+
+        // 5. Deploy the main DAO logic.
         const DAOFactory = await ethers.getContractFactory("ZKDAO");
-        daoContract = await DAOFactory.deploy(await verifierContract.getAddress(), 0);
-        await daoContract.waitForDeployment();
+        daoContract = await DAOFactory.deploy(
+            await verifierContract.getAddress(),
+            await registryContract.getAddress(),
+            await badgeContract.getAddress()
+        );
+
+        // Link Badge to DAO
+        await badgeContract.setDAOAddress(await daoContract.getAddress());
+
+        // Create a proposal to vote on
+        await daoContract.createProposal(1, "Test Prop", "Desc", "IPFS");
     });
 
     /**
@@ -44,14 +75,23 @@ describe("ZKDAO System Integration", function () {
         const proposalID = 1n;
         const voteChoice = 1n;
 
-        // 1. Locally compute the Merkle tree membership.
+        // 1. Calculate the Zeros as the contract does
         const depth = 20;
+        const zeros = [];
+        let currentZero = 0n;
+        for (let i = 0; i < depth; i++) {
+            zeros.push(currentZero);
+            currentZero = poseidonHash([currentZero, currentZero]);
+        }
+
+        // 2. Locally compute the Merkle tree membership (index 0)
         const pathElements = [];
         const pathIndices = [];
-        let runningHash = poseidonHash([secret]);
+        let commitment = poseidonHash([secret]);
+        let runningHash = commitment;
 
         for (let i = 0; i < depth; i++) {
-            const sibling = BigInt(i + 100);
+            const sibling = zeros[i];
             pathElements.push(sibling);
             pathIndices.push(0);
             runningHash = poseidonHash([runningHash, sibling]);
@@ -60,7 +100,7 @@ describe("ZKDAO System Integration", function () {
         const membershipRoot = runningHash.toString();
         const nullifierHash = poseidonHash([secret, proposalID]).toString();
 
-        // 2. Prepare circuit inputs.
+        // 3. Prepare circuit inputs.
         const circuitInputs = {
             root: membershipRoot,
             nullifierHash: nullifierHash,
@@ -74,13 +114,16 @@ describe("ZKDAO System Integration", function () {
         const wasm = path.join(__dirname, "../build/vote_js/vote.wasm");
         const zkey = path.join(__dirname, "../build/vote_final.zkey");
 
-        // 3. Generate the SNARK proof.
+        // 4. Generate the SNARK proof.
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(circuitInputs, wasm, zkey);
 
-        // Update the contract state to simulate the voter being in the set.
-        await daoContract.updateRoot(publicSignals[0]);
+        // Register the member
+        await registryContract.register(commitment.toString());
 
-        // 4. Format the proof for the Solidity call.
+        const rootFromRegistry = await registryContract.root();
+        expect(rootFromRegistry.toString()).to.equal(membershipRoot);
+
+        // 5. Format the proof and Vote
         const rawCallData = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
         const parsed = rawCallData.replace(/["[\]\s]/g, "").split(",");
 
@@ -89,40 +132,64 @@ describe("ZKDAO System Integration", function () {
         const c = [parsed[6], parsed[7]];
         const signals = [parsed[8], parsed[9], parsed[10], parsed[11]];
 
-        // 5. Execute the on-chain transaction.
         const voteTx = await daoContract.castVote(
             a, b, c,
             signals[1], // nullifier
             signals[2], // proposalId
             signals[0], // root
-            signals[3]  // actual vote choice
+            signals[3], // actual vote choice
+            deployer.address
         );
 
         const receipt = await voteTx.wait();
-        console.log(`\n⛽ INTEGRATION GAS: ${receipt.gasUsed.toString()} gas`);
-
         expect(receipt.status).to.equal(1);
 
-        // Verify that the vote was correctly recorded.
-        expect(await daoContract.yesVotes(proposalID)).to.equal(1n);
+        const tally = await daoContract.getTally(proposalID);
+        expect(tally.yes).to.equal(1n);
     });
 
-    it("Should prevent double voting attempts", async function () {
-        // We attempt to re-use the same nullifier emitted in the previous successful vote.
-        // Factoring out data generation for brevity.
+    it("Should reject votes for non-existent proposals", async function () {
+        const secret = 12345n;
+        const currentRoot = await registryContract.root();
+        const invalidProposalID = 99n;
+
+        await expect(
+            daoContract.castVote([0, 0], [[0, 0], [0, 0]], [0, 0], 1, invalidProposalID, currentRoot, 1, deployer.address)
+        ).to.be.revertedWith("DAO: Proposal does not exist");
+    });
+
+    it("Should allow voting with a root from the registry history (not just current root)", async function () {
         const secret = 12345n;
         const proposalID = 1n;
 
-        // Re-generate the nullifier.
-        const nullifier = poseidonHash([secret, proposalID]).toString();
+        // 1. Get current root
+        const oldRoot = await registryContract.root();
 
-        // Get the current root from the contract so we don't hit "Root mismatch"
-        const currentRoot = await daoContract.merkleRoot();
+        // 2. Update registry with a new member to change the root
+        await registryContract.register(67890n);
+        const newRoot = await registryContract.root();
+        expect(newRoot).to.not.equal(oldRoot);
 
-        // Try casting any vote with this used nullifier (proof format doesn't matter for this check)
-        // Note: Contract checks nullifier BEFORE proof for efficiency.
+        // 3. Both should be known
+        expect(await registryContract.isKnownRoot(oldRoot)).to.be.true;
+        expect(await registryContract.isKnownRoot(newRoot)).to.be.true;
+
+        // 4. Try voting with the OLD root (The contract should accept it)
+        // We use dummy proof data as we just want to get past the root check
+        // Note: It will fail at proof verification, but should NOT fail at "Root mismatch"
         await expect(
-            daoContract.castVote([0, 0], [[0, 0], [0, 0]], [0, 0], nullifier, proposalID, currentRoot, 1)
+            daoContract.castVote([0, 0], [[0, 0], [0, 0]], [0, 0], 1, proposalID, oldRoot, 1, deployer.address)
+        ).to.not.be.revertedWith("Registry: Root mismatch or expired");
+    });
+
+    it("Should prevent double voting attempts", async function () {
+        const secret = 12345n;
+        const proposalID = 1n;
+        const nullifier = poseidonHash([secret, proposalID]).toString();
+        const currentRoot = await registryContract.root();
+
+        await expect(
+            daoContract.castVote([0, 0], [[0, 0], [0, 0]], [0, 0], nullifier, proposalID, currentRoot, 1, deployer.address)
         ).to.be.revertedWith("Security: Double voting detected");
     });
 
@@ -131,7 +198,18 @@ describe("ZKDAO System Integration", function () {
         const maliciousInput = FIELD_PRIME + 1n;
 
         await expect(
-            daoContract.castVote([0, 0], [[0, 0], [0, 0]], [0, 0], maliciousInput.toString(), 1, 1, 1)
+            daoContract.castVote([0, 0], [[0, 0], [0, 0]], [0, 0], maliciousInput.toString(), 1, 1, 1, deployer.address)
         ).to.be.revertedWith("Input overflow: nullifierHash");
+    });
+
+    it("Should strictly enforce soulbound properties (non-transferable)", async function () {
+        const [, , user2] = await ethers.getSigners();
+        // The DAO is required to mint. In governance.test we link user2 to be the "DAO" for a moment
+        await badgeContract.setDAOAddress(deployer.address);
+        await badgeContract.mint(deployer.address);
+
+        await expect(
+            badgeContract.transferFrom(deployer.address, user2.address, 0)
+        ).to.be.revertedWithCustomError(badgeContract, "NotTransferable");
     });
 });

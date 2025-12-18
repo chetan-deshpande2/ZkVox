@@ -13,7 +13,7 @@ const { poseidon1, poseidon2 } = require("poseidon-lite");
 describe("Circuit Unit Tests", function () {
     this.timeout(100000); // SNARK proof generation can be slow on local machines.
 
-    let voteCircuit;
+    let voteCircuit: any;
 
     before(async function () {
         // NOTE: We use a relative path here to avoid shell-escaping issues in circom paths.
@@ -21,7 +21,7 @@ describe("Circuit Unit Tests", function () {
     });
 
     // Internal helper for Poseidon hashing logic.
-    const computeHash = (data) => {
+    const computeHash = (data: any) => {
         if (data.length === 1) return poseidon1(data);
         if (data.length === 2) return poseidon2(data);
         throw new Error(`Hash error: Poseidon not implemented for ${data.length} inputs`);
@@ -109,7 +109,7 @@ describe("Circuit Unit Tests", function () {
         try {
             await voteCircuit.calculateWitness(badInput, true);
             expect.fail("Expected failure due to secret mismatch");
-        } catch (err) {
+        } catch (err: any) {
             expect(err.message).to.include("Error");
         }
     });
@@ -133,7 +133,7 @@ describe("Circuit Unit Tests", function () {
         try {
             await voteCircuit.calculateWitness(input, true);
             expect.fail("Expected failure due to tampered path");
-        } catch (err) {
+        } catch (err: any) {
             expect(err.message).to.include("Error");
         }
     });
@@ -154,7 +154,7 @@ describe("Circuit Unit Tests", function () {
         try {
             await voteCircuit.calculateWitness(input);
             expect.fail("Expected failure for out-of-range vote value");
-        } catch (err) {
+        } catch (err: any) {
             expect(err.message).to.contain("Assert Failed");
         }
     });

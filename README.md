@@ -1,23 +1,21 @@
 # ZK DAO: Privacy-Preserving Voting System 🛡️🗳️
 
-A robust, production-hardened ZK-SNARK voting system that allows DAO members to vote anonymously on proposals. It uses Merkle trees for membership verification and nullifiers to prevent double-voting.
+A robust, production-hardened ZK-SNARK voting system that allows DAO members to vote anonymously on proposals. It features an on-chain membership registry, soulbound rewards, and rich proposal metadata.
 
 ## 🚀 Key Features
 
-- **Anonymous Voting**: Prove membership in a 1M-member tree without revealing your identity.
-- **Relayer Infrastructure**: Decouples user wallets from on-chain votes to maintain total privacy.
-- **Security Hardened**: Includes scalar field overflow protection and strict circuit-level constraints.
-- **Human-Centric Code**: Well-documented, clean code following best practices for ZK development.
-- **Comprehensive Tests**: 8+ end-to-end tests covering valid votes, tampered proofs, and relayer integration.
+- **🔐 ZK Privacy**: Anonymous membership (1M+ members), double-voting prevention (nullifiers), and relayer-ready architecture.
+- **🏛️ On-Chain Governance**: Automated Incremental Merkle Tree registry, rich metadata (titles, descriptions, IPFS), and proposal closure.
+- **🏅 Participation Rewards**: Soulbound NFT badges (ZKVoxBadge) with privacy-preserving reward addresses.
+- **🛡️ Security Hardened**: BN128 scalar field protection, Merkle root history tracking, and 18 comprehensive integration tests.
 
 ## 🛠️ Tech Stack
 
 - **ZK Circuits**: [Circom 2.1+](https://docs.circom.io/)
 - **Proving System**: [SnarkJS](https://github.com/iden3/snarkjs) (Groth16)
 - **Hashing**: Poseidon (Optimized for ZK)
-- **Smart Contracts**: Solidity 0.8.20+
+- **Smart Contracts**: Solidity 0.8.20+ (OpenZeppelin)
 - **Dev Environment**: Hardhat + [Bun](https://bun.sh/)
-- **Libraries**: OpenZeppelin, Poseidon-Lite
 
 ## 📂 Project Structure
 
@@ -25,10 +23,13 @@ A robust, production-hardened ZK-SNARK voting system that allows DAO members to 
 .
 ├── circuits/           # ZK-SNARK Circom circuits
 ├── contracts/          # Solidity smart contracts
+│   ├── interfaces/     # Modular contract interfaces
+│   ├── ZKDAO.sol       # Main governance logic
+│   ├── MembershipRegistry.sol # On-chain Merkle tree
+│   └── ZKVoxBadge.sol  # Soulbound reward NFT
 ├── scripts/            # Compilation, Deployment, and Relayer scripts
 ├── test/               # Comprehensive test suite (Unit & Integration)
 ├── build/              # Generated ZK artifacts (R1CS, WASM, zkey)
-├── security_review.md  # Detailed internal security audit
 └── README.md           # This file
 ```
 
@@ -57,15 +58,16 @@ This script handles the compilation, Powers of Tau generation, and Solidity veri
 ```
 
 ### 2. Run Tests
-We have three layers of testing:
+We have four layers of testing:
 ```bash
-# General system tests
+# Run all 18 tests
 bun run hardhat test
 
 # Specific layers
-bun run hardhat test test/vote.test.ts      # Circuit logic
-bun run hardhat test test/contracts.test.ts # On-chain logic
-bun run hardhat test test/relayer.test.ts   # Relayer privacy logic
+bun run hardhat test test/vote.test.ts       # Circuit logic
+bun run hardhat test test/contracts.test.ts  # On-chain integration
+bun run hardhat test test/relayer.test.ts    # Relayer privacy
+bun run hardhat test test/governance.test.ts # Membership & NFT logic
 ```
 
 ### 3. Deployment
