@@ -17,7 +17,7 @@ A robust, production-hardened ZK-SNARK voting system that allows DAO members to 
 - **Smart Contracts**: Solidity 0.8.20+ (OpenZeppelin)
 - **Dev Environment**: Hardhat + [Bun](https://bun.sh/)
 
-## 📂 Project Structure
+##  Project Structure
 
 ```text
 .
