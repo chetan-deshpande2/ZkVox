@@ -1,15 +1,15 @@
-# ZK DAO: Privacy-Preserving Voting System 🛡️🗳️
+# ZK DAO: Privacy-Preserving Voting System 
 
 A robust, production-hardened ZK-SNARK voting system that allows DAO members to vote anonymously on proposals. It features an on-chain membership registry, soulbound rewards, and rich proposal metadata.
 
-## 🚀 Key Features
+##  Key Features
 
-- **🔐 ZK Privacy**: Anonymous membership (1M+ members), double-voting prevention (nullifiers), and relayer-ready architecture.
-- **🏛️ On-Chain Governance**: Automated Incremental Merkle Tree registry, rich metadata (titles, descriptions, IPFS), and proposal closure.
-- **🏅 Participation Rewards**: Soulbound NFT badges (ZKVoxBadge) with privacy-preserving reward addresses.
-- **🛡️ Security Hardened**: BN128 scalar field protection, Merkle root history tracking, and 18 comprehensive integration tests.
+- ** ZK Privacy**: Anonymous membership (1M+ members), double-voting prevention (nullifiers), and relayer-ready architecture.
+- ** On-Chain Governance**: Automated Incremental Merkle Tree registry, rich metadata (titles, descriptions, IPFS), and proposal closure.
+- ** Participation Rewards**: Soulbound NFT badges (ZKVoxBadge) with privacy-preserving reward addresses.
+- ** Security Hardened**: BN128 scalar field protection, Merkle root history tracking, and 18 comprehensive integration tests.
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 - **ZK Circuits**: [Circom 2.1+](https://docs.circom.io/)
 - **Proving System**: [SnarkJS](https://github.com/iden3/snarkjs) (Groth16)
@@ -33,7 +33,7 @@ A robust, production-hardened ZK-SNARK voting system that allows DAO members to 
 └── README.md           # This file
 ```
 
-## ⚙️ Installation
+##  Installation
 
 1. **Clone the repository**:
    ```bash
@@ -49,7 +49,7 @@ A robust, production-hardened ZK-SNARK voting system that allows DAO members to 
 3. **Check Circom installation**:
    Ensure you have the `circom` binary in your path or inside the `bin/` folder.
 
-## 🏗️ Development Workflow
+##  Development Workflow
 
 ### 1. Compile Circuits
 This script handles the compilation, Powers of Tau generation, and Solidity verifier export.
@@ -76,7 +76,7 @@ Configure your `.env` file with `PRIVATE_KEY` and `RPC_URL`, then run:
 bun run hardhat run scripts/deploy.ts --network <your-network>
 ```
 
-## 🛰️ Relayer Infrastructure
+## Relayer Infrastructure
 
 To prevent "Privacy Leakage" (wallet address linked to the vote), use the provided relayer utility:
 - **Location**: `scripts/relayer.ts`
